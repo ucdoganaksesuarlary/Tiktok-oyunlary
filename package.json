@@ -1,0 +1,15 @@
+{
+  "name": "tiktok-interactive-battle",
+  "version": "1.0.0",
+  "description": "TikTok Live Interactive Flag Game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5",
+    "tiktok-live-connector": "^1.2.4"
+  }
+}
+
