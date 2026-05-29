@@ -3,190 +3,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TM vs TR - TikTok Live Game</title>
+    <title>TM vs TR - Professional Battle</title>
     <style>
         body { 
             margin: 0; 
-            background-color: #0d0e15; 
+            background-color: #0b0c10; 
             overflow: hidden; 
-            font-family: 'Arial', sans-serif; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
         }
         canvas { 
             display: block; 
-            background: linear-gradient(to bottom, #141526, #07080d); 
         }
-        #info-panel { 
-            position: absolute; 
-            top: 15px; 
-            width: 100%; 
-            text-align: center; 
-            color: white; 
-            font-size: 22px; 
-            font-weight: bold; 
-            text-shadow: 0px 4px 8px rgba(0,0,0,0.8);
-            letter-spacing: 1px;
+        #ui-overlay {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 40px;
+            box-sizing: border-box;
+            pointer-events: none;
+            z-index: 10;
         }
-        .gift-tag {
-            font-size: 14px;
-            color: #ffcc00;
-            display: block;
-            margin-top: 5px;
+        .team-score {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
         }
+        #tm-score { color: #00ffaa; }
+        #tr-score { color: #ff3366; }
+        #vs-box {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(5px);
+            color: #fff;
+            font-weight: bold;
+            text-align: center;
+        }
+        .gift-hint { font-size: 12px; color: #aaa; margin-top: 5px; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
-    <div id="info-panel">
-        GÖNI EFIR ÝARYŞY
-        <span class="gift-tag">Türkmenistan [Rose 🌹]  VS  Türkiýe [Balloon 🎈]</span>
+    <div id="ui-overlay">
+        <div id="tm-score" class="team-score">TM: 100%</div>
+        <div id="vs-box">
+            BATTLE ARENA
+            <div class="gift-hint">TM [Rose 🌹] vs TR [Balloon 🎈]</div>
+        </div>
+        <div id="tr-score" class="team-score">TR: 100%</div>
     </div>
     
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="battleCanvas"></canvas>
 
     <script>
-        const canvas = document.getElementById('gameCanvas');
+        const canvas = document.getElementById('battleCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Ekran ölçeglerini telewona görä sazlamak
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        // Oýunçylaryň jany (HP)
         let tmHP = 100;
         let trHP = 100;
 
-        // Oklaryň we effektleriň massiwi
+        let players = []; // Ekrandaky şarikler (avatarlar)
         let bullets = [];
         let particles = [];
 
-        // Baýdak şekillerini Canvas-da emele getirmek (Uly we owadan görünmegi üçin)
-        function drawFlags() {
-            const flagWidth = 90;
-            const flagHeight = 60;
-            const centerY = canvas.height / 2;
+        // Hakyky Baýdak suratlaryny internetden çekmek
+        const tmFlag = new Image();
+        tmFlag.src = 'https://flagcdn.com/w160/tm.png';
+        const trFlag = new Image();
+        trFlag.src = 'https://flagcdn.com/w160/tr.png';
 
-            // --- TÜRKMENISTAN BAÝDAGY (ÇEP) ---
-            ctx.fillStyle = "#009a44"; // TM Ýaşyly
-            ctx.fillRect(20, centerY - (flagHeight / 2), flagWidth, flagHeight);
-            
-            // Gyzyl zolak (göçme dizaýn)
-            ctx.fillStyle = "#c8102e";
-            ctx.fillRect(35, centerY - (flagHeight / 2), 15, flagHeight);
-            
-            // Ak reňkde ýarymaý we ýyldyzlar üçin simwoliki ýer
-            ctx.fillStyle = "white";
-            ctx.font = "bold 14px Arial";
-            ctx.fillText("🌙", 55, centerY - 5);
-            ctx.font = "bold 18px Arial";
-            ctx.fillText("TM", 48, centerY + 25);
+        // Fon şekili (Owadan kosmos/geometrik fon)
+        function drawBackground() {
+            let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, '#0a0b10');
+            grad.addColorStop(1, '#131522');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // --- TÜRKIÝE BAÝDAGY (SAG) ---
-            ctx.fillStyle = "#e30a17"; // TR Gyzyly
-            ctx.fillRect(canvas.width - 20 - flagWidth, centerY - (flagHeight / 2), flagWidth, flagHeight);
-            
-            // Ak ýarymaý we ýyldyz
-            ctx.fillStyle = "white";
-            ctx.font = "bold 18px Arial";
-            ctx.fillText("🌙⭐", canvas.width - 90, centerY - 2);
-            ctx.fillText("TR", canvas.width - 70, centerY + 25);
+            // Ortadaky neon bäsdeşlik liniýasy
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
         }
 
-        // Jan (HP) Barasyny çyzmak
-        function drawHealthBars() {
-            const barWidth = canvas.width / 2 - 40;
-            const barHeight = 24;
-            const topY = 60;
-
-            // TM HP Bar (Çep)
-            ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-            ctx.fillRect(20, topY, barWidth, barHeight);
-            ctx.fillStyle = "#00ff66";
-            ctx.fillRect(20, topY, barWidth * (tmHP / 100), barHeight);
-            
-            // TR HP Bar (Sag)
-            const trBarX = canvas.width / 2 + 20;
-            ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-            ctx.fillRect(trBarX, topY, barWidth, barHeight);
-            ctx.fillStyle = "#ff3333";
-            ctx.fillRect(trBarX, topY, barWidth * (trHP / 100), barHeight);
-
-            // HP Ýazgylary text görnüşinde
-            ctx.fillStyle = "white";
-            ctx.font = "bold 14px Arial";
-            ctx.fillText(`HP: ${Math.floor(tmHP)}%`, 30, topY + 17);
-            ctx.fillText(`HP: ${Math.floor(trHP)}%`, canvas.width - 90, topY + 17);
+        // UI täzelemek
+        function updateUI() {
+            document.getElementById('tm-score').innerText = `TM: ${Math.floor(tmHP)}%`;
+            document.getElementById('tr-score').innerText = `TR: ${Math.floor(trHP)}%`;
         }
 
-        // Partlama effekti (Olar degende emele gelýän owadan bölejikler)
+        // Tegelek şekil içinde avatar çyzmak (Suratdaky ýaly)
+        function drawAvatar(x, y, radius, team, username) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.clip();
+
+            // Eger hakyky avatar ýok bolsa, baýdagyň özüni tegelek edip çyzýar
+            if (team === 'TM') {
+                ctx.drawImage(tmFlag, x - radius, y - radius, radius * 2, radius * 2);
+            } else {
+                ctx.drawImage(trFlag, x - radius, y - radius, radius * 2, radius * 2);
+            }
+            ctx.restore();
+
+            // Daşyna neon tegelek çyzgy (Glow)
+            ctx.strokeStyle = team === 'TM' ? '#00ffaa' : '#ff3366';
+            ctx.lineWidth = 3;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = ctx.strokeStyle;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Ulanyjy adyny ýazmak
+            ctx.fillStyle = 'white';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(username.substring(0, 6), x, y + radius + 12);
+        }
+
         function createExplosion(x, y, color) {
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < 12; i++) {
                 particles.push({
-                    x: x,
-                    y: y,
-                    vx: (Math.random() - 0.5) * 6,
-                    vy: (Math.random() - 0.5) * 6,
-                    radius: Math.random() * 3 + 1,
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    radius: Math.random() * 4 + 1,
                     color: color,
                     alpha: 1
                 });
             }
         }
 
-        // Esasy Loop (Çyzyş we Hereket meýdançasy)
-        function updateGame() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Her gezek sowgat gelende täze oýunçy/şarik goşmak
+        function spawnPlayer(team, username, count) {
+            const sideX = team === 'TM' ? 80 : canvas.width - 80;
+            const randomY = 150 + Math.random() * (canvas.height - 300);
+            
+            players.push({
+                x: sideX,
+                y: randomY,
+                radius: 25 + Math.min(count, 15), // Sowgadyň ulylygyna görä şarik ulalýar
+                team: team,
+                username: username,
+                pulse: 0
+            });
 
-            // Ortadaky bäsdeşlik çyzygy
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-            ctx.lineWidth = 2;
-            ctx.setLineDash([10, 10]);
-            ctx.beginPath();
-            ctx.moveTo(canvas.width / 2, 100);
-            ctx.lineTo(canvas.width / 2, canvas.height);
-            ctx.stroke();
-            ctx.setLineDash([]); // Çyzygy dikeltmek
+            // Göni garşy tarapa ok atylýar
+            shoot(team, count, randomY);
+        }
 
-            // Elementleri çyzmak
-            drawFlags();
-            drawHealthBars();
+        function shoot(team, count, startY) {
+            const startX = team === 'TM' ? 120 : canvas.width - 120;
+            const direction = team === 'TM' ? 1 : -1;
+            const color = team === 'TM' ? '#00ffaa' : '#ff3366';
+
+            bullets.push({
+                x: startX,
+                y: startY,
+                speed: 8 * direction,
+                color: color,
+                damage: count * 2,
+                size: 6 + Math.min(count, 10)
+            });
+        }
+
+        // Oýun Loop-y
+        function gameLoop() {
+            drawBackground();
+
+            // Oýunçylary/Avatarlary çyzmak
+            players.forEach(p => {
+                p.pulse += 0.05;
+                let scaleRadius = p.radius + Math.sin(p.pulse) * 2;
+                drawAvatar(p.x, p.y, scaleRadius, p.team, p.username);
+            });
 
             // Oklary dolandyrmak
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
                 b.x += b.speed;
 
-                // Oky çyzmak (Ýalpyldawuk gowurma effekti)
-                ctx.shadowBlur = 10;
-                ctx.shadowColor = b.color;
                 ctx.fillStyle = b.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = b.color;
                 ctx.beginPath();
                 ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.shadowBlur = 0; // Şöhle effektini arassalamak
+                ctx.shadowBlur = 0;
 
-                // Çepden saga (TM -> TR urgy barlagy)
-                if (b.speed > 0 && b.x >= canvas.width - 110) {
+                // Urgy barlaglary
+                if (b.speed > 0 && b.x >= canvas.width - 100) {
                     trHP = Math.max(0, trHP - b.damage);
                     createExplosion(b.x, b.y, b.color);
                     bullets.splice(i, 1);
-                    if(trHP <= 0) resetGame();
-                }
-                // Sagdan çepe (TR -> TM urgy barlagy)
-                else if (b.speed < 0 && b.x <= 110) {
+                    updateUI();
+                } else if (b.speed < 0 && b.x <= 100) {
                     tmHP = Math.max(0, tmHP - b.damage);
                     createExplosion(b.x, b.y, b.color);
                     bullets.splice(i, 1);
-                    if(tmHP <= 0) resetGame();
+                    updateUI();
                 }
             }
 
-            // Partlama bölejiklerini durnuklaşdyrmak
+            // Partlamalary durnuklaşdyrmak
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.alpha -= 0.02;
+                p.x += p.vx; p.y += p.vy; p.alpha -= 0.02;
                 if (p.alpha <= 0) {
                     particles.splice(i, 1);
                 } else {
@@ -199,63 +236,21 @@
                 }
             }
 
-            requestAnimationFrame(updateGame);
+            requestAnimationFrame(gameLoop);
         }
 
-        // Ok atylmagyny üpjün edýän funksiýa
-        function shoot(team, count) {
-            const centerY = canvas.height / 2;
-            const randomY = centerY + (Math.random() * 160 - 80); // Oklaryň dürli ýerden gitmegi üçin
-            const bulletSize = Math.min(8 + count, 20); // Sowgadyň sanyna görä oky uly gurmak
-            const damageValue = count * 1.5;
-
-            if (team === 'TM') {
-                bullets.push({ 
-                    x: 110, 
-                    y: randomY, 
-                    speed: 6, 
-                    color: '#00ffcc', 
-                    size: bulletSize, 
-                    damage: damageValue 
-                });
-            } else if (team === 'TR') {
-                bullets.push({ 
-                    x: canvas.width - 110, 
-                    y: randomY, 
-                    speed: -6, 
-                    color: '#ff3355', 
-                    size: bulletSize, 
-                    damage: damageValue 
-                });
-            }
-        }
-
-        // Biri ýeňilse oýuny täzeden başlatmak
-        function resetGame() {
-            setTimeout(() => {
-                tmHP = 100;
-                trHP = 100;
-                bullets = [];
-                particles = [];
-            }, 3000);
-        }
-
-        // --- SOCKET.IO BACKEND BIRIKMESI ---
+        // Socket.io integrasiýasy
         const socket = io();
-
         socket.on('tiktok-gift', (data) => {
-            // TikTok-dan sowgat gelende awtomatiki ok atylýar
-            shoot(data.team, data.count);
+            spawnPlayer(data.team, data.user, data.count);
         });
 
-        // Ekran ölçegi üýtgese sazlamak
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         });
 
-        // Oýuny işletmek
-        updateGame();
+        gameLoop();
     </script>
 </body>
 </html>
