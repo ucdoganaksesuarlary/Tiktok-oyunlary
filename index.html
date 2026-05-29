@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TM vs TR - Professional Battle</title>
+    <title>TM vs TR - Battle Arena</title>
     <style>
         body { 
             margin: 0; 
             background-color: #0b0c10; 
             overflow: hidden; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            font-family: 'Segoe UI', Arial, sans-serif; 
         }
         canvas { 
             display: block; 
+            background: #0d0e15;
         }
         #ui-overlay {
             position: absolute;
@@ -20,39 +21,41 @@
             width: 100%;
             display: flex;
             justify-content: space-between;
-            padding: 0 40px;
+            padding: 0 20px;
             box-sizing: border-box;
             pointer-events: none;
             z-index: 10;
         }
         .team-score {
             color: white;
-            font-size: 24px;
+            font-size: 20px;
             font-weight: bold;
-            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.4);
+            padding: 5px 15px;
+            border-radius: 10px;
         }
-        #tm-score { color: #00ffaa; }
-        #tr-score { color: #ff3366; }
+        #tm-score { color: #00ffaa; border: 1px solid #00ffaa; }
+        #tr-score { color: #ff3366; border: 1px solid #ff3366; }
         #vs-box {
             background: rgba(255, 255, 255, 0.05);
-            padding: 10px 20px;
-            border-radius: 20px;
+            padding: 10px 15px;
+            border-radius: 15px;
             border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(5px);
             color: #fff;
             font-weight: bold;
             text-align: center;
+            font-size: 16px;
         }
-        .gift-hint { font-size: 12px; color: #aaa; margin-top: 5px; }
+        .gift-hint { font-size: 11px; color: #ccc; margin-top: 3px; }
     </style>
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
 
     <div id="ui-overlay">
         <div id="tm-score" class="team-score">TM: 100%</div>
         <div id="vs-box">
-            BATTLE ARENA
+            GÖNI EFIR ÝARYŞY
             <div class="gift-hint">TM [Rose 🌹] vs TR [Balloon 🎈]</div>
         </div>
         <div id="tr-score" class="team-score">TR: 100%</div>
@@ -70,149 +73,131 @@
         let tmHP = 100;
         let trHP = 100;
 
-        let players = []; // Ekrandaky şarikler (avatarlar)
+        let players = []; 
         let bullets = [];
         let particles = [];
 
-        // Hakyky Baýdak suratlaryny internetden çekmek
-        const tmFlag = new Image();
-        tmFlag.src = 'https://flagcdn.com/w160/tm.png';
-        const trFlag = new Image();
-        trFlag.src = 'https://flagcdn.com/w160/tr.png';
-
-        // Fon şekili (Owadan kosmos/geometrik fon)
         function drawBackground() {
-            let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            grad.addColorStop(0, '#0a0b10');
-            grad.addColorStop(1, '#131522');
-            ctx.fillStyle = grad;
+            // Neon we çyzyk dizaýnlary
+            ctx.fillStyle = '#0f101b';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Ortadaky neon bäsdeşlik liniýasy
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 10]);
             ctx.beginPath();
             ctx.moveTo(canvas.width / 2, 0);
             ctx.lineTo(canvas.width / 2, canvas.height);
             ctx.stroke();
+            ctx.setLineDash([]);
         }
 
-        // UI täzelemek
         function updateUI() {
             document.getElementById('tm-score').innerText = `TM: ${Math.floor(tmHP)}%`;
             document.getElementById('tr-score').innerText = `TR: ${Math.floor(trHP)}%`;
         }
 
-        // Tegelek şekil içinde avatar çyzmak (Suratdaky ýaly)
-        function drawAvatar(x, y, radius, team, username) {
+        // Owadan Neon Team Şarikleri (1-nji suratdaky ýaly)
+        function drawTeamBase(x, y, radius, team, username) {
             ctx.save();
             ctx.beginPath();
             ctx.arc(x, y, radius, 0, Math.PI * 2);
-            ctx.closePath();
-            ctx.clip();
-
-            // Eger hakyky avatar ýok bolsa, baýdagyň özüni tegelek edip çyzýar
-            if (team === 'TM') {
-                ctx.drawImage(tmFlag, x - radius, y - radius, radius * 2, radius * 2);
-            } else {
-                ctx.drawImage(trFlag, x - radius, y - radius, radius * 2, radius * 2);
-            }
-            ctx.restore();
-
-            // Daşyna neon tegelek çyzgy (Glow)
+            
+            // Içiniň reňki
+            ctx.fillStyle = team === 'TM' ? 'rgba(0, 255, 170, 0.2)' : 'rgba(255, 51, 102, 0.2)';
+            ctx.fill();
+            
+            // Neon ramkasy
             ctx.strokeStyle = team === 'TM' ? '#00ffaa' : '#ff3366';
-            ctx.lineWidth = 3;
-            ctx.shadowBlur = 10;
+            ctx.lineWidth = 4;
+            ctx.shadowBlur = 12;
             ctx.shadowColor = ctx.strokeStyle;
-            ctx.beginPath();
-            ctx.arc(x, y, radius, 0, Math.PI * 2);
             ctx.stroke();
+            ctx.restore();
             ctx.shadowBlur = 0;
 
-            // Ulanyjy adyny ýazmak
+            // Ýazgysy
             ctx.fillStyle = 'white';
-            ctx.font = '10px Arial';
+            ctx.font = 'bold 12px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(username.substring(0, 6), x, y + radius + 12);
+            ctx.fillText(username, x, y + 4);
         }
 
         function createExplosion(x, y, color) {
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < 10; i++) {
                 particles.push({
                     x: x, y: y,
-                    vx: (Math.random() - 0.5) * 8,
-                    vy: (Math.random() - 0.5) * 8,
-                    radius: Math.random() * 4 + 1,
+                    vx: (Math.random() - 0.5) * 6,
+                    vy: (Math.random() - 0.5) * 6,
+                    radius: Math.random() * 3 + 1,
                     color: color,
                     alpha: 1
                 });
             }
         }
 
-        // Her gezek sowgat gelende täze oýunçy/şarik goşmak
         function spawnPlayer(team, username, count) {
-            const sideX = team === 'TM' ? 80 : canvas.width - 80;
-            const randomY = 150 + Math.random() * (canvas.height - 300);
+            const sideX = team === 'TM' ? 70 : canvas.width - 70;
+            const randomY = 150 + Math.random() * (canvas.height - 250);
             
             players.push({
                 x: sideX,
                 y: randomY,
-                radius: 25 + Math.min(count, 15), // Sowgadyň ulylygyna görä şarik ulalýar
+                radius: 25,
                 team: team,
                 username: username,
-                pulse: 0
+                timer: 200 // Ekrandan öçmez ýaly wagt
             });
 
-            // Göni garşy tarapa ok atylýar
             shoot(team, count, randomY);
         }
 
         function shoot(team, count, startY) {
-            const startX = team === 'TM' ? 120 : canvas.width - 120;
+            const startX = team === 'TM' ? 100 : canvas.width - 100;
             const direction = team === 'TM' ? 1 : -1;
             const color = team === 'TM' ? '#00ffaa' : '#ff3366';
 
             bullets.push({
                 x: startX,
                 y: startY,
-                speed: 8 * direction,
+                speed: 7 * direction,
                 color: color,
                 damage: count * 2,
-                size: 6 + Math.min(count, 10)
+                size: 8
             });
         }
 
-        // Oýun Loop-y
         function gameLoop() {
             drawBackground();
 
-            // Oýunçylary/Avatarlary çyzmak
-            players.forEach(p => {
-                p.pulse += 0.05;
-                let scaleRadius = p.radius + Math.sin(p.pulse) * 2;
-                drawAvatar(p.x, p.y, scaleRadius, p.team, p.username);
-            });
+            // Söwüşýän bazalary çyzmak (Esasy uly tegelekler)
+            drawTeamBase(50, canvas.height/2, 40, 'TM', 'TM');
+            drawTeamBase(canvas.width - 50, canvas.height/2, 40, 'TR', 'TR');
 
-            // Oklary dolandyrmak
+            // Ulanyjy şariklerini dolandyrmak
+            for (let i = players.length - 1; i >= 0; i--) {
+                let p = players[i];
+                drawTeamBase(p.x, p.y, p.radius, p.team, p.username.substring(0,5));
+                p.timer--;
+                if(p.timer <= 0) players.splice(i, 1);
+            }
+
+            // Oklary süýşürmek
             for (let i = bullets.length - 1; i >= 0; i--) {
                 let b = bullets[i];
                 b.x += b.speed;
 
                 ctx.fillStyle = b.color;
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = b.color;
                 ctx.beginPath();
                 ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.shadowBlur = 0;
 
-                // Urgy barlaglary
-                if (b.speed > 0 && b.x >= canvas.width - 100) {
+                if (b.speed > 0 && b.x >= canvas.width - 90) {
                     trHP = Math.max(0, trHP - b.damage);
                     createExplosion(b.x, b.y, b.color);
                     bullets.splice(i, 1);
                     updateUI();
-                } else if (b.speed < 0 && b.x <= 100) {
+                } else if (b.speed < 0 && b.x <= 90) {
                     tmHP = Math.max(0, tmHP - b.damage);
                     createExplosion(b.x, b.y, b.color);
                     bullets.splice(i, 1);
@@ -220,7 +205,7 @@
                 }
             }
 
-            // Partlamalary durnuklaşdyrmak
+            // Bölejikleri dolandyrmak
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.x += p.vx; p.y += p.vy; p.alpha -= 0.02;
@@ -239,11 +224,22 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Socket.io integrasiýasy
-        const socket = io();
-        socket.on('tiktok-gift', (data) => {
-            spawnPlayer(data.team, data.user, data.count);
+        // --- TEST ETMEK ÜÇIN (Ekra basylanda ok atar) ---
+        window.addEventListener('click', (e) => {
+            if(e.clientX < canvas.width / 2) {
+                spawnPlayer('TM', 'Test_TM', 1);
+            } else {
+                spawnPlayer('TR', 'Test_TR', 1);
+            }
         });
+
+        // Socket.io baglanyşygy
+        try {
+            const socket = io();
+            socket.on('tiktok-gift', (data) => {
+                spawnPlayer(data.team, data.user, data.count);
+            });
+        } catch(e) { console.log("Serwer garaşylýar..."); }
 
         window.addEventListener('resize', () => {
             canvas.width = window.innerWidth;
